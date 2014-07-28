@@ -92,7 +92,6 @@ def test_view(Shape, cam=(1.,0.,0.,  0.,-1.4,4., 300.) ):
   ax2.axis([min(u), max(u), min(v), max(v)])
 
   P.draw()
-  return fig
 
 
 def pnp_experiments(Shape, n=1, observation_noise=[1.], initialization_noise=[1.]):
