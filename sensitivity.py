@@ -5,11 +5,11 @@ import pandas as pd
 
 nor = linalg.norm
 
-# Shapes are (endpoints, lines), of endpoints and lines in ground
-# plane coordinates.  Endpoints are a list of (x,y) Lines are are a
-# list of (x0,y0,x1,y1)
-
 class Shape:
+  """A shape is a set of 3D points. The segments() routine renders
+  these points as a line drawing. Currently, i'm only inspecting 2D
+  shapes so the endpoints are only 2D"""
+
   def endpoints(self):
     raise NotImplementedError
 
@@ -27,6 +27,7 @@ class Shape:
     for x0,y0,x1,y1 in self.segments(xy):
       h = P.Line2D([x0,x1], [y0,y1], color='r')
       ax.add_artist(h)
+
 
 class ShapeTriangle(Shape):
   def endpoints(self):
@@ -67,6 +68,9 @@ def test_shape_triangle():
 
 
 def test_view(Shape, cam=(1.,0.,0.,  0.,-1.4,4., 300.) ):
+  """Draw the shape in robot coordinates, then in image coordiantes
+  after it's been projected by the given camera parameters"""
+
   s = Shape()
   xy = array(s.endpoints())
 
@@ -94,15 +98,19 @@ def test_view(Shape, cam=(1.,0.,0.,  0.,-1.4,4., 300.) ):
   P.draw()
 
 
-def pnp_experiments(Shape, n=1, observation_noise=[1.], initialization_noise=[1.]):
-  """Fix the camera's pose, then perturn the observed shaped with
-  different amounts of noise. Then report errors in each component
+def pnp_experiments(Shape, n=1, observation_noise=[1.],
+                    initialization_noise=[1.]):
+  """Under a fixed camera's pose, render the given shape, then perturb
+  the observed image coordinates with different amounts of noise, and
+  run a calibration procedure. Report the error of the calibration
+  procedure. also do this for different amounts of noise in the
+  initial iterate of the calibration procedure.
   """
   # ground truth camera pose
   cam=(1.,0.,0.,  0.,-1.4,4., 300.)
 
 
-  # project a shape to image coordinates
+  # project shape to image coordinates
   s = Shape()
   xy = array(s.endpoints())
   A = matrix_rigid3d(cam)
@@ -144,6 +152,8 @@ def pnp_experiments(Shape, n=1, observation_noise=[1.], initialization_noise=[1.
 
 
 def show_pnp_experiments(df):
+  """Renter the output of pnp_experiments"""
+
   fig = P.figure(0); fig.clear()
   ax_rot = fig.add_subplot(1,3,1)
   ax_trans = fig.add_subplot(1,3,2)
@@ -170,6 +180,7 @@ def show_pnp_experiments(df):
   ax_trans.set_xlabel('Relative image noise variance')
   ax_f.set_title('Focal length error')
   ax_f.legend(['Initialization noise=%.4g'%n for n in init_noises])
+
 
 from ggplot import *
 def show_pnp_experiments0(df):
