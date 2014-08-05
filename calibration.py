@@ -1,5 +1,5 @@
 """
-A package to reocver the pose and focal length of a camera given 3D
+A package to recover the pose and focal length of a camera given 3D
 pionts and their corresponding 2D projections.
 
 Includes functions that map from 3D to 2D projections and their
