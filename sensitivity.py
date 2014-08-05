@@ -31,21 +31,34 @@ class Shape:
 
 class ShapeTriangle(Shape):
   def endpoints(self):
-    return (-.8,0), (.8,0), (0,3.)
+    """
+            C
+            /\
+           /  \
+          B G  D
+         /      \
+        /        \
+       A    F     E
+    """
+    return (-2,0), (-1,3), (0,6), (1,3), (2,0), (0,0), (0,3)
 
   def segments(self, xy):
-    ll,lr,la = xy
-    return [hstack((ll,la)), hstack((la,lr))]
+    a,b,c,d,e,f,g = xy
+    return [hstack((a,b)), hstack((b,c)), hstack((c,d)), hstack((d,e)),
+            hstack((f,g)), hstack((g,c))]
 
 class ShapeGrid(Shape):
+  nx = 3
+  ny = 3
+
   def endpoints(self):
-    X,Y = meshgrid(linspace(-2.,2., 3), linspace(0.,6.,7))
+    X,Y = meshgrid(linspace(-2.,2., self.nx), linspace(0.,6., self.ny))
     return zip(X.ravel(), Y.ravel())
 
   def segments(self, xy):
     X,Y = array(xy).T
-    X = X.reshape(7,3)
-    Y = Y.reshape(7,3)
+    X = X.reshape(self.ny, self.nx)
+    Y = Y.reshape(self.ny, self.nx)
     hlines = zip(X[:,0], Y[:,0], X[:,-1], Y[:,0])
     vlines = zip(X[0,:], Y[0,:], X[-1,:], Y[-1,:])
     return hlines+vlines
@@ -98,7 +111,7 @@ def test_view(Shape, cam=(1.,0.,0.,  0.,-1.4,4., 300.) ):
   P.draw()
 
 
-def pnp_experiments(Shape, n=1, observation_noise=[1.],
+def pnp_experiments(Shape, cam, n=1, observation_noise=[1.],
                     initialization_noise=[1.]):
   """Under a fixed camera's pose, render the given shape, then perturb
   the observed image coordinates with different amounts of noise, and
@@ -106,26 +119,22 @@ def pnp_experiments(Shape, n=1, observation_noise=[1.],
   procedure. also do this for different amounts of noise in the
   initial iterate of the calibration procedure.
   """
-  # ground truth camera pose
-  cam=(1.,0.,0.,  0.,-1.4,4., 300.)
-
-
-  # project shape to image coordinates
+  # shape in world coordinates
   s = Shape()
   xy = array(s.endpoints())
+
+  # project shape to image coordinates
   A = matrix_rigid3d(cam)
   u, v = transform_point(xy[:,0], xy[:,1], zeros(len(xy)), A)
 
-
   df = {}
-
   for init_noise in initialization_noise:
     for obs_noise in observation_noise:
       for it in xrange(n):
         # corrupt image observation by gaussian noise
         noise_var = obs_noise/sqrt( (max(u)-min(u) + max(v) - min(v))/2 )
-        u += noise_var*random.randn(len(u))
-        v += noise_var*random.randn(len(v))
+        uo = u + noise_var*random.randn(len(u))
+        vo = v + noise_var*random.randn(len(v))
 
         # perturb starting pose slightly
         cam_init = cam + hstack((init_noise*0.1*random.randn(3),
@@ -134,7 +143,7 @@ def pnp_experiments(Shape, n=1, observation_noise=[1.],
 
         # recover pose
         cam_hat = PnP(xy[:,0], xy[:,1], zeros(len(xy)),
-                      u,v,cam_init,(0,0), w=1., rendering=False)
+                      uo, vo, cam_init, (0,0), w=1., rendering=False)
 
         # rotation error
         df.setdefault('noise_var',[]).append(noise_var)
@@ -151,9 +160,10 @@ def pnp_experiments(Shape, n=1, observation_noise=[1.],
 
 
 
-def show_pnp_experiments(df):
+def show_pnp_experiments(df, ylim_factor=1.):
   """Renter the output of pnp_experiments"""
 
+  # one set of axes for each of rotation, translation and focal point.
   fig = P.figure(0); fig.clear()
   ax_rot = fig.add_subplot(1,3,1)
   ax_trans = fig.add_subplot(1,3,2)
@@ -162,19 +172,27 @@ def show_pnp_experiments(df):
   colors = ['r','g','b','k','m','c']
   init_noises = unique(df['init_noise'])
 
+
+  # draw the curves for a given constant initialization in each of the
+  # axes
   for init_noise,color in zip(init_noises,colors):
     i = df['init_noise'] == init_noise
 
-    ax_rot.plot(df['noise_var'][i], df['rot_err'][i],
-                color=color, lw=0, marker='.')
-    ax_trans.plot(df['noise_var'][i], df['translation_err'][i],
-                  color=color, lw=0, marker='.')
-    ax_f.plot(df['noise_var'][i], df['f_err'][i],
-             color=color, lw=0, marker='.')
+    x_dodge = .1* mean(abs(diff(unique(df['noise_var'][i])))) * random.randn(sum(i))
 
-  ax_rot.set_ylim([0,1.])
-  ax_trans.set_ylim([0,2.])
-  ax_f.set_ylim([0,80.])
+    ax_rot.plot(df['noise_var'][i] + x_dodge,
+                df['rot_err'][i],
+                color=color, lw=0, marker='.', ms=1)
+    ax_trans.plot(df['noise_var'][i] + x_dodge,
+                  df['translation_err'][i],
+                  color=color, lw=0, marker='.', ms=1)
+    ax_f.plot(df['noise_var'][i] + x_dodge,
+              df['f_err'][i],
+              color=color, lw=0, marker='.', ms=1)
+
+  ax_rot.set_ylim([0,ylim_factor*1.])
+  ax_trans.set_ylim([0,ylim_factor*2.])
+  ax_f.set_ylim([0,ylim_factor*80.])
   ax_rot.set_title('Rotation error')
   ax_trans.set_title('Translation error')
   ax_trans.set_xlabel('Relative image noise variance')
