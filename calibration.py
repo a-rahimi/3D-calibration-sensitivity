@@ -1,23 +1,53 @@
 """
 A package to recover the pose and focal length of a camera given 3D
-pionts and their corresponding 2D projections.
+pionts and their corresponding 2D projections. Includes functions that
+map from 3D to 2D projections and their derivatives (that's the core
+part).
 
-Includes functions that map from 3D to 2D projections and their
-derivatives.
+The camera has seven parameters (wx,wy,wz,tx,ty,tz,f). (wx,wy,wz)
+describe its rotation about the origin as parameters of a Cayley
+rotation (see the docsring on rot_cayley).  (tx,ty,tz) describe its
+translation about the origin. The last parameter is its focal length.
+
+With R(w) denoting the rotation matrix and T=(tx,ty,tz) denoting the
+translation vector, the camera transforms a point (x,y,z) into image
+points (u,v) as
+
+  (x',y',z') = R(w) (x,y,z) + T
+
+Then
+
+ (u,v) = (f x'/z' + center_u,   f y'/z' + center_v)
+
+The center of projection (center_u,center_v) is assumed known (I use
+the center of the image when I use this package).
+
+I used Cayley rotations instead of twists or Euler angles because I've
+been curious about them for years.  They turn out to simplify the
+code.
 """
 
 from numpy import *
 
 def PnP(x,y,z,u,v,cam,center, w=1., rendering=True):
     """Finds camera parameters (pose and focal length) that minimize
-    the projection error between real-world points X in the XY
-    plane at Z=1 and 2D image points uv. An initial pose must be
-    supplied.
+    the projection error between real-world points and their
+    cooresponding 2D image points. An initial pose must be supplied.
+
+
+    x,y,z are vectors of x,y,and z real world coordinates
+    respectively.  u,v are vectors of u,v are vectors of image
+    coordinates. all these vectors must have the same length. cam is
+    an initial guess of the camera parameters. it is a vector of
+    length 7.  center is the center of projection.  the reprojection
+    error for each point is optionally re-weighted by w.
+
+    rendering is passed directly to fmin_nlls.
     """
     wsqrt = sqrt(w)
 
     def _func(a):
-        A,dA = matrix_rigid3d(a,deriv=True)
+        A,dA = matrix_rigid3d(a, deriv=True)
         uu,vv,duu,dvv = transform_point(x,y,z,A,dA)
         F = hstack((wsqrt*uu,
                     wsqrt*vv))
@@ -39,9 +69,13 @@ def PnP(x,y,z,u,v,cam,center, w=1., rendering=True):
 
 def transform_point(x,y,z,A,dAdp=None):
     """Apply a 3x4 linear transform A to points in x,y,z and project
-    the resulting points back.  If dA/dp is specified, also returns
-    the derivatives of the points wrt dp. Each entry of dAdp is the
-    Jacobian of A wrt some variable p.
+    the resulting points back.
+
+    If dA/dp is specified, also returns the derivatives of the points
+    wrt dp. In that case dAdp must be a sequence, of partial derivates
+    of A with respect to different scalar parameters.  So if A is a
+    function of three scalars p1,p2,p3, dAdp is a sequence of 3x4
+    matrices dA/dp1, dA/dp2, dA/dp3.
 
     Specifically, compute
 
@@ -289,6 +323,12 @@ def fmin_nlls(func,y,a,maxlinesearch=10,rendering=True):
          f_i(a) = f_i(a0) + d/da f_i(a) (a-a0)
 
     and solving for (a-a0) with least squares.
+
+
+    If rendering is a function, it is called at each iteration, to
+    provide the caller a progress report. Otherwise, if it evaluates
+    to true, prints a progress report for each iteration. If it
+    evaluates to false, does nothing.
     """
     # the current function value and its derivative
     f,df = func(a)
